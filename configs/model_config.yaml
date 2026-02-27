@@ -1,0 +1,41 @@
+# Copyright 2026 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Model and API Configuration for PaperVizAgent
+
+# Default Models - Updated 2026
+# NOTE: gemini-1.5 models are deprecated. Use latest models below.
+
+defaults:
+  # 텍스트/코드 생성용 모델 (텍스트 에이전트용)
+  # 옵션:
+  #   - "gemini-2.0-flash" (추천 - 빠르고 안정적, Generally Available)
+  #   - "gemini-2.5-pro" (고성능, Preview)
+  #   - "gemini-3.1-pro-preview" (최신 최고 성능, Preview)
+  model_name: "gemini-2.0-flash"
+  
+  # 이미지 생성용 모델
+  # 중요: 이미지 생성 모델은 지속적으로 변경됩니다. 최신 정보를 확인하세요.
+  # 옵션 (2026년 2월 기준):
+  #   - "gemini-2.5-flash-image" (추천 - 멀티모달 이미지 생성 + 편집, Preview)
+  #   - "imagen-4.0-generate-001" (고품질 이미지 생성, 별도 API 필요)
+  #   - "gemini-3-pro-image-preview" (최신 멀티모달, Preview)
+  #   - "gemini-2.0-flash-exp-image-generation" (실험적, 불안정할 수 있음)
+  image_model_name: "gemini-2.5-flash-image"
+
+# API Keys. If you are using all gemini models, you can leave the other keys empty.
+api_keys:
+  google_api_key: "AIzaSyBkeyH3gr5IDMYzfiyq3--Gp-xLEcRPwII" # Google AI Studio에서 발급 (https://aistudio.google.com/app/apikey)
+  openai_api_key: "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" # OpenAI API Key (선택사항)
+  anthropic_api_key: "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" # Anthropic API Key (선택사항)

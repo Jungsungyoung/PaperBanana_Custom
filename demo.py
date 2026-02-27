@@ -73,9 +73,144 @@ except Exception as e:
 
 st.set_page_config(
     layout="wide",
-    page_title="PaperVizAgent Parallel Demo",
+    page_title="PaperBanana 데모",
     page_icon="🍌"
 )
+
+def init_session_state():
+    """세션 상태 초기화"""
+    if 'api_configured' not in st.session_state:
+        st.session_state.api_configured = False
+    if 'google_api_key' not in st.session_state:
+        st.session_state.google_api_key = ""
+    if 'model_name' not in st.session_state:
+        st.session_state.model_name = ""
+    if 'image_model_name' not in st.session_state:
+        st.session_state.image_model_name = ""
+
+@st.dialog("🔐 API 설정")
+def render_api_settings_dialog():
+    """API 설정 다이얼로그 렌더링"""
+    
+    # 기존 설정값 로드
+    default_api_key = get_config_val("api_keys", "google_api_key", "GOOGLE_API_KEY", "")
+    default_model = get_config_val("defaults", "model_name", "MODEL_NAME", "gemini-2.0-flash-exp")
+    default_image_model = get_config_val("defaults", "image_model_name", "IMAGE_MODEL_NAME", "gemini-2.0-flash-exp-image-generation")
+    
+    # 세션 상태 초기화
+    if not st.session_state.google_api_key and default_api_key:
+        st.session_state.google_api_key = default_api_key
+    if not st.session_state.model_name and default_model:
+        st.session_state.model_name = default_model
+    if not st.session_state.image_model_name and default_image_model:
+        st.session_state.image_model_name = default_image_model
+    
+    # 설정 상태 표시
+    if st.session_state.api_configured or st.session_state.google_api_key:
+        st.success("✅ API 설정 완료")
+    else:
+        st.warning("⚠️ API Key 미설정")
+    
+    st.divider()
+    
+    # API Key 입력
+    api_key = st.text_input(
+        "Google API Key",
+        value=st.session_state.google_api_key,
+        type="password",
+        help="Google AI Studio에서 발급받은 API Key를 입력하세요",
+        placeholder="AIza..."
+    )
+    
+    # 모델 설정
+    col1, col2 = st.columns(2)
+    with col1:
+        model_name = st.text_input(
+            "텍스트 모델",
+            value=st.session_state.model_name or "gemini-2.0-flash-exp",
+            help="텍스트 생성에 사용할 모델명"
+        )
+    with col2:
+        image_model_name = st.text_input(
+            "이미지 모델",
+            value=st.session_state.image_model_name or "gemini-2.0-flash-exp-image-generation",
+            help="이미지 생성에 사용할 모델명"
+        )
+    
+    # API Key 발급 안내
+    with st.expander("📖 API Key 발급 방법"):
+        st.markdown("""
+        ### Google API Key 발급
+        
+        1. [Google AI Studio](https://aistudio.google.com/app/apikey) 접속
+        2. Google 계정으로 로그인
+        3. "Create API Key" 클릭
+        4. 새 프로젝트 선택 또는 생성
+        5. API Key 복사하여 위에 입력
+        
+        ### 참고 모델
+        - **텍스트**: `gemini-2.0-flash-exp`
+        - **이미지**: `gemini-2.0-flash-exp-image-generation`
+        """)
+    
+    st.divider()
+    
+    # 버튼 영역
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        # 설정 저장 버튼
+        if st.button("💾 저장", type="primary", use_container_width=True):
+            if not api_key:
+                st.error("⚠️ API Key를 입력해주세요!")
+            else:
+                # 세션 상태 저장
+                st.session_state.google_api_key = api_key
+                st.session_state.model_name = model_name
+                st.session_state.image_model_name = image_model_name
+                st.session_state.api_configured = True
+                
+                # 환경 변수 설정
+                os.environ["GOOGLE_API_KEY"] = api_key
+                os.environ["MODEL_NAME"] = model_name
+                os.environ["IMAGE_MODEL_NAME"] = image_model_name
+                
+                st.success("✅ API 설정이 저장되었습니다!")
+                st.rerun()
+    
+    with col2:
+        # 설정 초기화 버튼
+        if st.button("🔄 초기화", use_container_width=True):
+            st.session_state.google_api_key = ""
+            st.session_state.model_name = ""
+            st.session_state.image_model_name = ""
+            st.session_state.api_configured = False
+            st.info("설정이 초기화되었습니다.")
+            st.rerun()
+
+def render_api_settings():
+    """API 설정 버튼 및 상태 표시 (헤더용)"""
+    # 설정 상태 확인
+    is_configured = st.session_state.api_configured or st.session_state.google_api_key
+    
+    # 버튼 레이블 및 아이콘 설정
+    if is_configured:
+        button_label = "🔐 API 설정"
+        button_type = "secondary"
+    else:
+        button_label = "⚠️ API 설정"
+        button_type = "primary"
+    
+    # API 설정 버튼 클릭 시 다이얼로그 열기
+    if st.button(button_label, type=button_type, key="api_settings_btn"):
+        render_api_settings_dialog()
+    
+    # 현재 설정값 반환
+    return (
+        st.session_state.google_api_key,
+        st.session_state.model_name or "gemini-2.0-flash-exp",
+        st.session_state.image_model_name or "gemini-2.0-flash-exp-image-generation"
+    )
 
 def clean_text(text):
     """Clean text by removing invalid UTF-8 surrogate characters."""
@@ -173,11 +308,12 @@ async def refine_image_with_nanoviz(image_bytes, edit_prompt, aspect_ratio="21:9
         from google import genai
         from google.genai import types
         
-        # Initialize client
-        project_id = get_config_val("google_cloud", "project_id", "GOOGLE_CLOUD_PROJECT", "")
-        location = get_config_val("google_cloud", "location", "GOOGLE_CLOUD_LOCATION", "global")
+        # Initialize client with API key (not Vertex AI)
+        api_key = get_config_val("api_keys", "google_api_key", "GOOGLE_API_KEY", "")
+        if not api_key:
+            return None, "❌ 오류: Google API 키를 찾을 수 없습니다. configs/model_config.yaml에 설정해주세요."
         
-        client = genai.Client(vertexai=True, project=project_id, location=location)
+        client = genai.Client(api_key=api_key)
         
         # Prepare content
         contents = [
@@ -215,14 +351,14 @@ async def refine_image_with_nanoviz(image_bytes, edit_prompt, aspect_ratio="21:9
                     edited_image_data = part.inline_data.data
                     
                     if isinstance(edited_image_data, bytes):
-                        return edited_image_data, "✅ Image refined successfully!"
+                        return edited_image_data, "✅ 이미지 개선 완료!"
                     elif isinstance(edited_image_data, str):
-                        return base64.b64decode(edited_image_data), "✅ Image refined successfully!"
+                        return base64.b64decode(edited_image_data), "✅ 이미지 개선 완료!"
         
-        return None, "❌ No image data found in response"
+        return None, "❌ 응답에서 이미지 데이터를 찾을 수 없습니다."
     
     except Exception as e:
-        return None, f"❌ Error: {str(e)}"
+        return None, f"❌ 오류: {str(e)}"
 
 
 def get_evolution_stages(result, exp_mode):
@@ -235,10 +371,10 @@ def get_evolution_stages(result, exp_mode):
     planner_desc_key = f"target_{task_name}_desc0"
     if planner_img_key in result and result[planner_img_key]:
         stages.append({
-            "name": "📋 Planner",
+            "name": "📋 기획자(Planner)",
             "image_key": planner_img_key,
             "desc_key": planner_desc_key,
-            "description": "Initial diagram plan based on method content"
+            "description": "방법론 내용을 기반으로 한 초기 도식화 계획"
         })
     
     # Stage 2: Stylist output (only for demo_full)
@@ -247,10 +383,10 @@ def get_evolution_stages(result, exp_mode):
         stylist_desc_key = f"target_{task_name}_stylist_desc0"
         if stylist_img_key in result and result[stylist_img_key]:
             stages.append({
-                "name": "✨ Stylist",
+                "name": "✨ 스타일리스트(Stylist)",
                 "image_key": stylist_img_key,
                 "desc_key": stylist_desc_key,
-                "description": "Stylistically refined description"
+                "description": "스타일적으로 개선된 설명"
             })
     
     # Stage 3+: Critic iterations
@@ -261,17 +397,17 @@ def get_evolution_stages(result, exp_mode):
         
         if critic_img_key in result and result[critic_img_key]:
             stages.append({
-                "name": f"🔍 Critic Round {round_idx}",
+                "name": f"🔍 평가자(Critic) 라운드 {round_idx}",
                 "image_key": critic_img_key,
                 "desc_key": critic_desc_key,
                 "suggestions_key": critic_sugg_key,
-                "description": f"Refined after critic feedback (iteration {round_idx})"
+                "description": f"평가자 피드백 후 개선 (반복 {round_idx})"
             })
     
     return stages
 
 def display_candidate_result(result, candidate_id, exp_mode):
-    """Display a single candidate result."""
+    """단일 후보 결과를 표시합니다."""
     task_name = "diagram"
     
     # Determine which image to show based on exp_mode
@@ -302,29 +438,29 @@ def display_candidate_result(result, candidate_id, exp_mode):
     if final_image_key and final_image_key in result:
         img = base64_to_image(result[final_image_key])
         if img:
-            st.image(img, use_container_width=True, caption=f"Candidate {candidate_id} (Final)")
+            st.image(img, use_container_width=True, caption=f"후보 {candidate_id} (최종)")
             
             # Add download button
             buffered = BytesIO()
             img.save(buffered, format="PNG")
             st.download_button(
-                label="⬇️ Download",
+                label="⬇️ 다운로드",
                 data=buffered.getvalue(),
-                file_name=f"candidate_{candidate_id}.png",
+                file_name=f"후보_{candidate_id}.png",
                 mime="image/png",
                 key=f"download_candidate_{candidate_id}",
                 use_container_width=True
             )
         else:
-            st.error(f"Failed to decode image for Candidate {candidate_id}")
+            st.error(f"후보 {candidate_id}의 이미지 디코딩 실패")
     else:
-        st.warning(f"No image generated for Candidate {candidate_id}")
+        st.warning(f"후보 {candidate_id}에 대해 생성된 이미지가 없습니다.")
     
     # Show evolution timeline in an expander
     stages = get_evolution_stages(result, exp_mode)
     if len(stages) > 1:
-        with st.expander(f"🔄 View Evolution Timeline ({len(stages)} stages)", expanded=False):
-            st.caption("See how the diagram evolved through different pipeline stages")
+        with st.expander(f"🔄 개선 과정 보기 ({len(stages)} 단계)", expanded=False):
+            st.caption("파이프라인의 각 단계별로 도식화가 어떻게 개선되었는지 확인하세요")
             
             for idx, stage in enumerate(stages):
                 st.markdown(f"### {stage['name']}")
@@ -337,17 +473,17 @@ def display_candidate_result(result, candidate_id, exp_mode):
                 
                 # Show description
                 if stage['desc_key'] in result:
-                    with st.expander(f"📝 Description", expanded=False):
+                    with st.expander(f"📝 설명", expanded=False):
                         cleaned_desc = clean_text(result[stage['desc_key']])
                         st.write(cleaned_desc)
                 
                 # Show critic suggestions if available
                 if 'suggestions_key' in stage and stage['suggestions_key'] in result:
                     suggestions = result[stage['suggestions_key']]
-                    with st.expander(f"💡 Critic Suggestions", expanded=False):
+                    with st.expander(f"💡 평가자 제안", expanded=False):
                         cleaned_sugg = clean_text(suggestions)
                         if cleaned_sugg.strip() == "No changes needed.":
-                            st.success("✅ No changes needed - iteration stopped.")
+                            st.success("✅ 변경 사항 없음 - 반복이 중지되었습니다.")
                         else:
                             st.write(cleaned_sugg)
                 
@@ -356,91 +492,108 @@ def display_candidate_result(result, candidate_id, exp_mode):
                     st.divider()
     else:
         # If only one stage, show description in simpler expander
-        with st.expander(f"📝 View Description", expanded=False):
+        with st.expander(f"📝 설명 보기", expanded=False):
             if final_desc_key and final_desc_key in result:
                 # Clean the text to remove invalid UTF-8 characters
                 cleaned_desc = clean_text(result[final_desc_key])
                 st.write(cleaned_desc)
             else:
-                st.info("No description available")
+                st.info("설명이 없습니다")
 
 def main():
-    st.title("🍌 PaperVizAgent Demo")
-    st.markdown("AI-powered scientific diagram generation and refinement")
+    # 세션 상태 초기화
+    init_session_state()
+    
+    # 헤더 영역: 제목과 API 설정 버튼을 나란히 배치
+    header_col1, header_col2 = st.columns([6, 1])
+    
+    with header_col1:
+        st.title("🍌 PaperBanana 데모")
+        st.markdown("AI 기반 학술 도식화 자동 생성 및 개선")
+    
+    with header_col2:
+        st.markdown("<br>", unsafe_allow_html=True)  # 버튼을 아래로 내리기 위한 여백
+        # API 설정 버튼 렌더링
+        api_key, model_name, image_model_name = render_api_settings()
     
     # Create tabs
-    tab1, tab2 = st.tabs(["📊 Generate Candidates", "✨ Refine Image"])
+    tab1, tab2 = st.tabs(["📊 후보 생성", "✨ 이미지 개선"])
     
     # ==================== TAB 1: Generate Candidates ====================
     with tab1:
-        st.markdown("### Generate multiple diagram candidates from your method section and caption")
+        st.markdown("### 방법론 섹션과 캡션을 입력하여 여러 도식화 후보를 생성하세요")
+        
+        # API Key 체크
+        if not st.session_state.api_configured and not get_config_val("api_keys", "google_api_key", "GOOGLE_API_KEY", ""):
+            st.warning("⚠️ **API Key가 설정되지 않았습니다.** 우측 상단의 **🔐 API 설정** 버튼을 클릭하여 설정해주세요.")
+            st.info("💡 API Key는 [Google AI Studio](https://aistudio.google.com/app/apikey)에서 물론 발급받을 수 있습니다.")
         
         # Sidebar configuration for Tab 1
         with st.sidebar:
-            st.title("⚙️ Generation Settings")
+            st.title("⚙️ 생성 설정")
             
             exp_mode = st.selectbox(
-                "Pipeline Mode",
+                "파이프라인 모드",
                 ["demo_planner_critic", "demo_full"],
                 index=0,
                 key="tab1_exp_mode",
-                help="Select which agent pipeline to use"
+                help="사용할 에이전트 파이프라인을 선택하세요"
             )
             
             mode_info = {
-                "demo_planner_critic": "Planner → Visualizer → Critic → Visualizer",
-                "demo_full": "Retriever → Planner → Stylist → Visualizer → Critic → Visualizer. (The stylist can make the diagram more aesthetically pleasing, but prone to be overly simplied. So we recommend trying both modes and select the best one)"
+                "demo_planner_critic": "기획자 → 시각화자 → 평가자 → 시각화자",
+                "demo_full": "검색자 → 기획자 → 스타일리스트 → 시각화자 → 평가자 → 시각화자. (스타일리스트가 미적으로 더 예쁜 다이어그램을 만들지만 과도하게 단순화될 수 있으므로, 두 모드를 모두 시도하여 더 나은 것을 선택하시는 것을 권장합니다)"
             }
-            st.info(f"**Pipeline:** {mode_info[exp_mode]}")
+            st.info(f"**파이프라인:** {mode_info[exp_mode]}")
             
             retrieval_setting = st.selectbox(
-                "Retrieval Setting",
+                "검색 설정",
                 ["auto", "manual", "random", "none"],
                 index=0,
                 key="tab1_retrieval_setting",
-                help="How to retrieve reference diagrams: auto (automatic selection), manual (use specified references), random (random selection), none (no retrieval)"
+                help="참조 다이어그램을 검색하는 방법: auto (자동 선택), manual (지정된 참조 사용), random (무작위 선택), none (검색 없음)"
             )
             
             num_candidates = st.number_input(
-                "Number of Candidates",
+                "후보 개수",
                 min_value=1,
                 max_value=20,
                 value=10,
                 key="tab1_num_candidates",
-                help="How many parallel candidates to generate"
+                help="병렬로 생성할 후보의 수"
             )
             
             aspect_ratio = st.selectbox(
-                "Aspect Ratio",
+                "화면 비율",
                 ["21:9", "16:9", "3:2"],
                 key="tab1_aspect_ratio",
-                help="Aspect ratio for the generated diagrams"
+                help="생성될 다이어그램의 화면 비율"
             )
             
             max_critic_rounds = st.number_input(
-                "Max Critic Rounds",
+                "최대 평가자 라운드",
                 min_value=1,
                 max_value=5,
                 value=3,
                 key="tab1_max_critic_rounds",
-                help="Maximum number of critic refinement iterations"
+                help="평가자 개선 반복의 최대 횟수"
             )
             
             default_model = get_config_val("defaults", "model_name", "MODEL_NAME", "YOUR_MODEL_NAME_HERE")
             options = ["", default_model] if default_model else ["", "YOUR_MODEL_NAME_HERE"]
             
             model_name = st.selectbox(
-                "Model Name",
+                "모델 이름",
                 options,
                 index=0,
                 key="tab1_model_name",
-                help="Model name to use for reasoning"
+                help="추론에 사용할 모델 이름"
             )
         
         st.divider()
         
         # Input section
-        st.markdown("## 📝 Input")
+        st.markdown("## 📝 입력")
         
         # Example content
         example_method = r"""## Methodology: The PaperVizAgent Framework
@@ -500,57 +653,60 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
         with col_input1:
             # Example selector for method content
             method_example = st.selectbox(
-                "Load Example (Method)",
-                ["None", "PaperVizAgent Framework"],
+                "예시 불러오기 (방법론)",
+                ["없음", "PaperVizAgent 프레임워크"],
                 key="method_example_selector"
             )
             
             # Set value based on example selection or session state
-            if method_example == "PaperVizAgent Framework":
+            if method_example == "PaperVizAgent 프레임워크":
                 method_value = example_method
             else:
                 method_value = st.session_state.get("method_content", "")
             
             method_content = st.text_area(
-                "Method Section Content (Markdown recommended)",
+                "방법론 섹션 내용 (Markdown 권장)",
                 value=method_value,
                 height=250,
-                placeholder="Paste the method section content here...",
-                help="The method section from the paper that describes the approach. Markdown format is recommended."
+                placeholder="방법론 섹션 내용을 여기에 붙여넣으세요...",
+                help="논문의 방법론 섹션을 입력하세요. Markdown 형식을 권장합니다."
             )
         
         with col_input2:
             # Example selector for caption
             caption_example = st.selectbox(
-                "Load Example (Caption)",
-                ["None", "PaperVizAgent Framework"],
+                "예시 불러오기 (캡션)",
+                ["없음", "PaperVizAgent 프레임워크"],
                 key="caption_example_selector"
             )
             
             # Set value based on example selection or session state
-            if caption_example == "PaperVizAgent Framework":
+            if caption_example == "PaperVizAgent 프레임워크":
                 caption_value = example_caption
             else:
                 caption_value = st.session_state.get("caption", "")
             
             caption = st.text_area(
-                "Figure Caption (Markdown recommended)",
+                "그림 캡션 (Markdown 권장)",
                 value=caption_value,
                 height=250,
-                placeholder="Enter the figure caption...",
-                help="The caption or description of the figure to generate. Markdown format is recommended."
+                placeholder="그림 캡션을 입력하세요...",
+                help="생성할 그림의 캡션 또는 설명을 입력하세요. Markdown 형식을 권장합니다."
             )
         
         # Process button
-        if st.button("🚀 Generate Candidates", type="primary", use_container_width=True):
-            if not method_content or not caption:
-                st.error("Please provide both method content and caption!")
+        if st.button("🚀 후보 생성", type="primary", use_container_width=True):
+            # API Key 체크
+            if not st.session_state.api_configured and not get_config_val("api_keys", "google_api_key", "GOOGLE_API_KEY", ""):
+                st.error("⚠️ API Key가 설정되지 않았습니다. 우측 상단의 **🔐 API 설정** 버튼을 클릭하여 설정해주세요.")
+            elif not method_content or not caption:
+                st.error("방법론 내용과 캡션을 모두 입력해주세요!")
             else:
                 # Save to session state
                 st.session_state["method_content"] = method_content
                 st.session_state["caption"] = caption
                 
-                with st.spinner(f"Generating {num_candidates} candidates in parallel... This may take a few minutes."):
+                with st.spinner(f"{num_candidates}개 후보를 병렬로 생성 중... 몇 분 정도 소요될 수 있습니다."):
                     # Create input data list
                     input_data_list = create_sample_inputs(
                         method_content=method_content,
@@ -590,12 +746,12 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
                                 f.write(json_string)
                             
                             st.session_state["json_file"] = str(json_filename)
-                            st.success(f"✅ Successfully generated {len(results)} candidates!")
-                            st.info(f"💾 Results saved to: `{json_filename.name}`")
+                            st.success(f"✅ {len(results)}개 후보 생성 완료!")
+                            st.info(f"💾 결과 저장 위치: `{json_filename.name}`")
                         except Exception as e:
-                            st.warning(f"⚠️ Generated {len(results)} candidates, but failed to save JSON: {e}")
+                            st.warning(f"⚠️ {len(results)}개 후보는 생성되었지만 JSON 저장에 실패했습니다: {e}")
                     except Exception as e:
-                        st.error(f"Error during processing: {e}")
+                        st.error(f"처리 중 오류 발생: {e}")
                         import traceback
                         st.code(traceback.format_exc())
         
@@ -606,8 +762,8 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
             timestamp = st.session_state.get("timestamp", "N/A")
             
             st.divider()
-            st.markdown("## 🎨 Generated Candidates")
-            st.caption(f"Generated at: {timestamp} | Pipeline: {mode_info.get(current_mode, current_mode)}")
+            st.markdown("## 🎨 생성된 후보")
+            st.caption(f"생성 시간: {timestamp} | 파이프라인: {mode_info.get(current_mode, current_mode)}")
             
             # Show JSON file download if available
             if "json_file" in st.session_state:
@@ -615,12 +771,12 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
                 if json_file_path.exists():
                     col1, col2 = st.columns([3, 1])
                     with col1:
-                        st.info(f"📄 Results saved to: `{json_file_path.relative_to(Path.cwd())}`")
+                        st.info(f"📄 결과 저장 위치: `{json_file_path.relative_to(Path.cwd())}`")
                     with col2:
                         with open(json_file_path, "r", encoding="utf-8") as f:
                             json_data = f.read()
                         st.download_button(
-                            label="⬇️ Download JSON",
+                            label="⬇️ JSON 다운로드",
                             data=json_data,
                             file_name=json_file_path.name,
                             mime="application/json",
@@ -641,7 +797,7 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
             
             # Add ZIP download button
             st.divider()
-            st.markdown("### 💾 Batch Download")
+            st.markdown("### 💾 일괄 다운로드")
             
             try:
                 import zipfile
@@ -681,49 +837,49 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
                 
                 zip_buffer.seek(0)
                 st.download_button(
-                    label="⬇️ Download ZIP",
+                    label="⬇️ ZIP 다운로드",
                     data=zip_buffer.getvalue(),
                     file_name=f"papervizagent_candidates_{datetime.now().strftime('%Y%m%d_%H%M%S')}.zip",
                     mime="application/zip",
                     use_container_width=True
                 )
-                st.success("ZIP file ready for download!")
+                st.success("ZIP 파일 다운로드 준비 완료!")
             except Exception as e:
-                st.error(f"Failed to create ZIP: {e}")
+                st.error(f"ZIP 파일 생성 실패: {e}")
     
     # ==================== TAB 2: Refine Image ====================
     with tab2:
-        st.markdown("### Refine and upscale your diagram to high resolution (2K/4K)")
-        st.caption("Upload an image from the candidates or any diagram, describe changes, and generate a high-res version")
+        st.markdown("### 다이어그램을 고해상도(2K/4K)로 개선 및 확대")
+        st.caption("후보에서 이미지를 업로드하거나 다이어그램을 업로드하고, 변경 사항을 설명한 후 고해상도 버전을 생성하세요")
         
         # Sidebar for refinement settings
         with st.sidebar:
-            st.title("✨ Refinement Settings")
+            st.title("✨ 개선 설정")
             
             refine_resolution = st.selectbox(
-                "Target Resolution",
+                "목표 해상도",
                 ["2K", "4K"],
                 index=0,
                 key="refine_resolution",
-                help="Higher resolution takes longer but produces better quality"
+                help="해상도가 높을수록 시간이 더 걸리지만 더 나은 품질을 제공합니다"
             )
             
             refine_aspect_ratio = st.selectbox(
-                "Aspect Ratio",
+                "종횡비",
                 ["21:9", "16:9", "3:2"],
                 index=0,
                 key="refine_aspect_ratio",
-                help="Aspect ratio for the refined image"
+                help="개선된 이미지의 종횡비"
             )
         
         st.divider()
         
         # Upload section
-        st.markdown("## 📤 Upload Image")
+        st.markdown("## 📤 이미지 업로드")
         uploaded_file = st.file_uploader(
-            "Choose an image file",
+            "이미지 파일 선택",
             type=["png", "jpg", "jpeg"],
-            help="Upload the diagram you want to refine"
+            help="개선할 다이어그램을 업로드하세요"
         )
         
         if uploaded_file is not None:
@@ -732,27 +888,30 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
             col1, col2 = st.columns(2)
             
             with col1:
-                st.markdown("### Original Image")
+                st.markdown("### 원본 이미지")
                 st.image(uploaded_image, use_container_width=True)
             
             with col2:
-                st.markdown("### Edit Instructions")
+                st.markdown("### 편집 지침")
                 edit_prompt = st.text_area(
-                    "Describe the changes you want",
+                    "원하는 변경 사항 설명",
                     height=200,
-                    placeholder="E.g., 'Change the color scheme to match academic paper style' or 'Make the text larger and bolder' or 'Keep everything the same but output in higher resolution'",
-                    help="Describe what you want to change or use 'Keep everything the same' for just upscaling",
+                    placeholder="예: '색상 구성표를 학술 논문 스타일에 맞게 변경' 또는 '텍스트를 더 크고 굵게 만들기' 또는 '모든 것을 그대로 유지되 더 높은 해상도로 출력'",
+                    help="변경하고 싶은 내용을 설명하거나 '모든 것을 그대로 유지'를 사용하여 확대만 하세요",
                     key="edit_prompt"
                 )
                 
-                if st.button("✨ Refine Image", type="primary", use_container_width=True):
+                if st.button("✨ 이미지 개선", type="primary", use_container_width=True):
                     if not edit_prompt:
-                        st.error("Please provide edit instructions!")
+                        st.error("편집 지침을 제공해주세요!")
                     else:
-                        with st.spinner(f"Refining image to {refine_resolution} resolution... This may take a minute."):
+                        with st.spinner(f"{refine_resolution} 해상도로 이미지를 개선 중입니다... 약 1분이 소요될 수 있습니다."):
                             try:
                                 # Convert PIL image to bytes
                                 img_byte_arr = BytesIO()
+                                # Convert RGBA to RGB if necessary (JPEG doesn't support alpha channel)
+                                if uploaded_image.mode == 'RGBA':
+                                    uploaded_image = uploaded_image.convert('RGB')
                                 uploaded_image.save(img_byte_arr, format='JPEG')
                                 image_bytes = img_byte_arr.getvalue()
                                 
@@ -774,30 +933,30 @@ The framework extends to statistical plots by adjusting the Visualizer and Criti
                                 else:
                                     st.error(message)
                             except Exception as e:
-                                st.error(f"Error during refinement: {e}")
+                                st.error(f"개선 중 오류 발생: {e}")
                                 import traceback
                                 st.code(traceback.format_exc())
             
             # Display refined result if available
             if "refined_image" in st.session_state:
                 st.divider()
-                st.markdown("## 🎨 Refined Result")
-                st.caption(f"Generated at: {st.session_state.get('refine_timestamp', 'N/A')} | Resolution: {refine_resolution}")
+                st.markdown("## 🎨 개선된 결과")
+                st.caption(f"생성 시간: {st.session_state.get('refine_timestamp', 'N/A')} | 해상도: {refine_resolution}")
                 
                 col1, col2 = st.columns(2)
                 
                 with col1:
-                    st.markdown("### Before")
+                    st.markdown("### 이전")
                     st.image(uploaded_image, use_container_width=True)
                 
                 with col2:
-                    st.markdown(f"### After ({refine_resolution})")
+                    st.markdown(f"### 이후 ({refine_resolution})")
                     refined_image = Image.open(BytesIO(st.session_state["refined_image"]))
                     st.image(refined_image, use_container_width=True)
                     
                     # Download button
                     st.download_button(
-                        label=f"⬇️ Download {refine_resolution} Image",
+                        label=f"⬇️ {refine_resolution} 이미지 다운로드",
                         data=st.session_state["refined_image"],
                         file_name=f"refined_{refine_resolution}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png",
                         mime="image/png",
